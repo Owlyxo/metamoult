@@ -140,6 +140,13 @@ This is a small project looked after by one person in their spare time.
 - **Not promised:** new formats, video/audio, response times, or support for
   every vendor-specific metadata block.
 
+## AI assistance
+
+metamoult was built by Dan with the help of [Claude Code](https://claude.com/claude-code)
+(an AI coding assistant by Anthropic). Claude Code helped write code, tests and
+documentation, find bugs and optimise. The project goals, decisions, review and
+maintenance are Dan's.
+
 ## License
 
 [MIT](LICENSE)
