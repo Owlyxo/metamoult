@@ -139,3 +139,79 @@ def make_pdf(path, *, metadata: bool = True):
     with open(path, "wb") as fh:
         writer.write(fh)
     return path
+
+
+_CORE = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+    'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '
+    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+    '<dc:title>Jane budget</dc:title><dc:creator>Jane Example</dc:creator>'
+    '<cp:lastModifiedBy>John Sample</cp:lastModifiedBy>'
+    '<dcterms:created xsi:type="dcterms:W3CDTF">2020-01-02T03:04:05Z</dcterms:created>'
+    '</cp:coreProperties>'
+)
+_APP = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
+    '<Application>FakeOffice</Application><AppVersion>16.0</AppVersion>'
+    '<Company>Example Corp</Company><Pages>3</Pages></Properties>'
+)
+_CUSTOM = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" '
+    'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'
+    '<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="ProjectCode">'
+    '<vt:lpwstr>X-42</vt:lpwstr></property></Properties>'
+)
+_RELS = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="MAIN"/>'
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail" Target="docProps/thumbnail.jpeg"/>'
+    '</Relationships>'
+)
+_CONTENT_TYPES = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    '<Default Extension="xml" ContentType="application/xml"/>'
+    '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>'
+)
+_OFFICE_MAIN = {
+    "docx": ("word/document.xml",
+             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+             '<w:body><w:p><w:ins w:id="1" w:author="Jane Example" w:date="2020-01-02T03:04:05Z">'
+             '<w:r><w:t>Hello</w:t></w:r></w:ins></w:p></w:body></w:document>'),
+    "xlsx": ("xl/workbook.xml", '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>'),
+    "pptx": ("ppt/presentation.xml", '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>'),
+}
+
+
+def make_office(path, *, metadata: bool = True):
+    """Write a minimal docx/xlsx/pptx (chosen by file extension) with invented metadata."""
+    import zipfile
+
+    kind = path.suffix[1:]
+    main_name, main_xml = _OFFICE_MAIN[kind]
+    if not metadata:
+        main_xml = main_xml.replace(' w:author="Jane Example"', "")
+    parts = {
+        "[Content_Types].xml": _CONTENT_TYPES,
+        "_rels/.rels": _RELS.replace("MAIN", main_name),
+        main_name: main_xml,
+    }
+    if metadata:
+        parts["docProps/core.xml"] = _CORE
+        parts["docProps/app.xml"] = _APP
+        parts["docProps/custom.xml"] = _CUSTOM
+        parts["docProps/thumbnail.jpeg"] = "fake preview image bytes"
+        if kind == "xlsx":
+            parts["xl/comments1.xml"] = "<comments><authors><author>Jane Example</author></authors></comments>"
+        if kind == "pptx":
+            parts["ppt/commentAuthors.xml"] = '<p:cmAuthorLst xmlns:p="x"><p:cmAuthor id="0" name="Jane Example" initials="JE"/></p:cmAuthorLst>'
+    else:
+        parts["_rels/.rels"] = parts["_rels/.rels"].split("<Relationship Id=\"rId2\"")[0] + "</Relationships>"
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, text in parts.items():
+            zf.writestr(zipfile.ZipInfo(name, date_time=(2020, 1, 2, 3, 4, 5)), text)
+    return path

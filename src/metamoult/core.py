@@ -65,7 +65,7 @@ def detect_format(path: str | Path) -> str:
 def scan_file(path: str | Path) -> list[Finding]:
     """Scan a file and return its findings, most severe first."""
     # Imported here so that core stays free of import cycles.
-    from .scanners import image, pdf
+    from .scanners import image, office, pdf
 
     path = Path(path)
     fmt = detect_format(path)
@@ -73,6 +73,8 @@ def scan_file(path: str | Path) -> list[Finding]:
         findings = image.scan_image(path, fmt)
     elif fmt == "pdf":
         findings = pdf.scan_pdf(path)
+    elif fmt in ("docx", "xlsx", "pptx"):
+        findings = office.scan_office(path)
     else:
         raise UnsupportedFormatError(f"{path.name}: {fmt} is not supported yet")
     return sorted(findings, key=lambda f: f.risk.rank)

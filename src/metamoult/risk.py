@@ -20,7 +20,7 @@ _RULES: list[tuple[str, Risk, str]] = [
     (r"serial", Risk.HIGH,
      "A serial number can link this file to your specific device."),
     (r"owner", Risk.HIGH, "This contains the name of the device or file owner."),
-    (r"(^|:)(artist|author|creator|by-line|byline|copyright|rights|writer|credit)$",
+    (r"(artist|author|creator|by-line|byline|copyright|rights|writer|credit)$",
      Risk.HIGH, "This contains the name of a person (author, creator or rights holder)."),
     (r"lastmodifiedby|lastsavedby|office:company|office:manager", Risk.HIGH,
      "This contains a person's or organisation's name."),
@@ -37,6 +37,8 @@ _RULES: list[tuple[str, Risk, str]] = [
      "A manufacturer-specific data block; it may contain serial numbers and settings."),
     (r"city|province|state|country|sublocation|location", Risk.MEDIUM,
      "This names a place connected to the file."),
+    (r"office:custom", Risk.MEDIUM,
+     "A custom property added by a person or a company system; it may contain names or IDs."),
     (r"comment|description|caption|headline|title|subject|keywords|objectname",
      Risk.MEDIUM, "Free text written by a person; it may contain names or places."),
 ]

@@ -5,11 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import re
+import zipfile
+
 import piexif
 from pypdf import PdfWriter
 
 from . import containers, jpeg
 from .core import Finding, UnsupportedFormatError, detect_format, scan_file
+from .scanners.office import ANON_AUTHOR, AUTHOR_PARTS
 from .scanners.pdf import open_pdf
 from .scanners.image import PNG_METADATA_CHUNKS, WEBP_METADATA_CHUNKS
 
@@ -121,7 +125,61 @@ def _clean_pdf(src: Path, dst: Path) -> None:
         writer.write(fh)
 
 
-_CLEANERS = {"jpeg": _clean_jpeg, "png": _clean_png, "webp": _clean_webp, "heic": _clean_heic, "pdf": _clean_pdf}
+_XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+_VT = 'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"'
+_EMPTY_PARTS = {
+    "docProps/core.xml": _XML_HEAD + (
+        '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/'
+        'core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" '
+        'xmlns:dcterms="http://purl.org/dc/terms/" '
+        'xmlns:dcmitype="http://purl.org/dc/dcmitype/" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>'),
+    "docProps/app.xml": _XML_HEAD + (
+        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/'
+        f'extended-properties" {_VT}/>'),
+    "docProps/custom.xml": _XML_HEAD + (
+        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/'
+        f'custom-properties" {_VT}/>'),
+}
+_NEUTRAL_DATE = (1980, 1, 1, 0, 0, 0)  # ZIP entries carry timestamps too
+
+
+def _anonymise_authors(name: str, data: bytes) -> bytes:
+    """Replace author names in comment/revision parts with a neutral placeholder."""
+    for name_pattern, text_pattern in AUTHOR_PARTS:
+        if name_pattern.fullmatch(name):
+            text = data.decode("utf-8")
+            text = text_pattern.sub(
+                lambda m: m.group(0).replace(m.group(1), ANON_AUTHOR), text)
+            text = re.sub(r'(w:initials|\binitials)="[^"]*"', r'\1=""', text)
+            return text.encode("utf-8")
+    return data
+
+
+def _clean_office(src: Path, dst: Path) -> None:
+    """Blank the document properties, drop the thumbnail and neutralise author names."""
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            name = item.filename
+            if name.startswith("docProps/thumbnail"):
+                continue
+            data = zin.read(name)
+            if name in _EMPTY_PARTS:
+                data = _EMPTY_PARTS[name].encode("utf-8")
+            elif name == "_rels/.rels":  # forget the thumbnail relationship
+                data = re.sub(rb"<Relationship\b[^>]*thumbnail[^>]*/>", b"", data)
+            elif name == "[Content_Types].xml":
+                data = re.sub(rb"<Override\b[^>]*thumbnail[^>]*/>", b"", data)
+            else:
+                data = _anonymise_authors(name, data)
+            entry = zipfile.ZipInfo(name, date_time=_NEUTRAL_DATE)
+            entry.compress_type = zipfile.ZIP_DEFLATED
+            entry.external_attr = item.external_attr
+            zout.writestr(entry, data)
+
+
+_CLEANERS = {"jpeg": _clean_jpeg, "png": _clean_png, "webp": _clean_webp, "heic": _clean_heic, "pdf": _clean_pdf,
+             "docx": _clean_office, "xlsx": _clean_office, "pptx": _clean_office}
 
 
 def clean_file(src: str | Path, out_dir: str | Path | None = None) -> CleanResult:
