@@ -11,14 +11,14 @@ from ..risk import make_finding
 from . import iptc, xmp
 from .exif import scan_exif
 
-IMAGE_FORMATS = {"jpeg", "png", "webp"}
+IMAGE_FORMATS = {"jpeg", "png", "webp", "heic"}
 
 _MAX_TEXT = 1_000_000  # stop decompressing PNG text after 1 MB (guards against zip bombs)
 
 
 def scan_image(path: Path, fmt: str) -> list[Finding]:
     """Scan an image file of the given format."""
-    scanners = {"jpeg": _scan_jpeg, "png": _scan_png, "webp": _scan_webp}
+    scanners = {"jpeg": _scan_jpeg, "png": _scan_png, "webp": _scan_webp, "heic": _scan_heic}
     if fmt not in scanners:
         raise ValueError(f"unsupported image format: {fmt}")
     return scanners[fmt](path)
@@ -124,4 +124,19 @@ def _scan_webp(path: Path) -> list[Finding]:
             findings += scan_exif(with_exif_header(chunk.body))
         elif chunk.fourcc == b"XMP ":
             findings += xmp.scan_xmp(chunk.body)
+    return findings
+
+
+# --- HEIC -----------------------------------------------------------------
+
+
+def _scan_heic(path: Path) -> list[Finding]:
+    import pillow_heif
+
+    info = pillow_heif.open_heif(str(path)).info
+    findings: list[Finding] = []
+    if info.get("exif"):
+        findings += scan_exif(with_exif_header(info["exif"]))
+    if info.get("xmp"):
+        findings += xmp.scan_xmp(info["xmp"])
     return findings

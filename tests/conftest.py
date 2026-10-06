@@ -103,3 +103,13 @@ def make_webp(path, *, metadata: bool = True, size=(32, 24)):
     kwargs = {"exif": fake_exif(), "xmp": XMP_PACKET} if metadata else {}
     img.save(path, "WEBP", lossless=True, **kwargs)
     return path
+
+
+def make_heic(path, *, metadata: bool = True, size=(64, 48)):
+    """Write a small HEIC with invented EXIF and XMP."""
+    import pillow_heif
+
+    img = Image.effect_noise(size, 60).convert("RGB")
+    kwargs = {"exif": fake_exif(), "xmp": XMP_PACKET} if metadata else {}
+    pillow_heif.from_pillow(img).save(str(path), quality=90, **kwargs)
+    return path

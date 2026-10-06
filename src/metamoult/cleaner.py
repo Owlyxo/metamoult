@@ -80,7 +80,25 @@ def _clean_webp(src: Path, dst: Path) -> None:
     dst.write_bytes(containers.build_webp(chunks))
 
 
-_CLEANERS = {"jpeg": _clean_jpeg, "png": _clean_png, "webp": _clean_webp}
+HEIC_QUALITY = 95
+
+
+def _clean_heic(src: Path, dst: Path) -> None:
+    """Re-save the picture without metadata. This re-encodes it (HEIC is lossy)."""
+    import pillow_heif
+    from PIL import Image
+
+    heif = pillow_heif.open_heif(str(src))
+    image = heif.to_pillow()
+    icc_profile = image.info.get("icc_profile")
+    # Rebuild the image from raw pixels so no metadata can be carried over.
+    # pillow-heif already applied the rotation while decoding.
+    plain = Image.frombytes(image.mode, image.size, image.tobytes())
+    pillow_heif.from_pillow(plain).save(
+        str(dst), quality=HEIC_QUALITY, exif=None, xmp=None, icc_profile=icc_profile)
+
+
+_CLEANERS = {"jpeg": _clean_jpeg, "png": _clean_png, "webp": _clean_webp, "heic": _clean_heic}
 
 
 def clean_file(src: str | Path, out_dir: str | Path | None = None) -> CleanResult:
