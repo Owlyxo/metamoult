@@ -1,0 +1,83 @@
+"""Create cleaned copies of files. The original file is never modified."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import piexif
+
+from . import jpeg
+from .core import Finding, UnsupportedFormatError, detect_format, scan_file
+
+_ORIENTATION_TAG = piexif.ImageIFD.Orientation
+
+
+@dataclass
+class CleanResult:
+    """Outcome of cleaning one file."""
+
+    source: Path
+    output: Path
+    before: list[Finding]
+    after: list[Finding]
+
+
+def output_path(src: Path, out_dir: Path | None = None) -> Path:
+    """Pick a free path like 'photo_clean.jpg'; never an existing file."""
+    folder = out_dir if out_dir is not None else src.parent
+    candidate = folder / f"{src.stem}_clean{src.suffix}"
+    counter = 2
+    while candidate.exists():
+        candidate = folder / f"{src.stem}_clean_{counter}{src.suffix}"
+        counter += 1
+    return candidate
+
+
+def _clean_jpeg(src: Path, dst: Path) -> None:
+    """Drop all metadata segments without re-compressing the picture."""
+    segments, tail = jpeg.parse_jpeg(src.read_bytes())
+
+    orientation = 1
+    for seg in segments:
+        if jpeg.is_exif(seg):
+            try:
+                orientation = piexif.load(seg.data)["0th"].get(_ORIENTATION_TAG, 1)
+            except Exception:
+                pass
+
+    kept = [seg for seg in segments if not jpeg.is_metadata(seg)]
+    if orientation != 1:
+        # Keep only the rotation hint, otherwise the photo would show up sideways.
+        minimal = piexif.dump({"0th": {_ORIENTATION_TAG: orientation}})
+        position = 0
+        while position < len(kept) and kept[position].marker == jpeg.APP0:
+            position += 1
+        kept.insert(position, jpeg.Segment(jpeg.APP1, minimal))
+    dst.write_bytes(jpeg.build_jpeg(kept, tail))
+
+
+_CLEANERS = {"jpeg": _clean_jpeg}
+
+
+def clean_file(src: str | Path, out_dir: str | Path | None = None) -> CleanResult:
+    """Write a cleaned copy of `src` and scan it again.
+
+    The copy is named '<name>_clean<ext>' and placed next to the original
+    (or in `out_dir`). Raises UnsupportedFormatError for unknown formats.
+    """
+    src = Path(src)
+    fmt = detect_format(src)
+    if fmt not in _CLEANERS:
+        raise UnsupportedFormatError(f"{src.name}: cleaning {fmt} is not supported yet")
+
+    folder = Path(out_dir) if out_dir is not None else None
+    if folder is not None:
+        folder.mkdir(parents=True, exist_ok=True)
+    dst = output_path(src, folder)
+    if dst.resolve() == src.resolve():  # cannot happen with the naming scheme; be safe
+        raise RuntimeError("refusing to overwrite the original file")
+
+    before = scan_file(src)
+    _CLEANERS[fmt](src, dst)
+    return CleanResult(source=src, output=dst, before=before, after=scan_file(dst))
