@@ -1,0 +1,77 @@
+name: release
+
+# Builds stand-alone programs (no Python needed) when a version tag is pushed,
+# e.g.  git tag v0.1.0 && git push origin v0.1.0
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows
+            archive: zip
+          - os: ubuntu-latest
+            label: linux
+            archive: gztar
+          - os: macos-latest
+            label: macos
+            archive: gztar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install ".[gui,dev]"
+      - name: Build command line program
+        run: >
+          pyinstaller --noconfirm --onefile --name metamoult
+          --collect-all pillow_heif --distpath dist-cli --workpath build-cli
+          packaging/cli_entry.py
+      - name: Build graphical program
+        run: >
+          pyinstaller --noconfirm --onedir --windowed --name metamoult-gui
+          --collect-all pillow_heif --collect-all tkinterdnd2
+          --distpath dist-gui --workpath build-gui
+          packaging/gui_entry.py
+      - name: Smoke test
+        shell: bash
+        run: ./dist-cli/metamoult --version
+      - name: Package
+        shell: python
+        run: |
+          import shutil
+          for kind in ("cli", "gui"):
+              shutil.make_archive(
+                  f"metamoult-{kind}-${{ matrix.label }}", "${{ matrix.archive }}", f"dist-{kind}")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: programs-${{ matrix.label }}
+          path: |
+            metamoult-*.zip
+            metamoult-*.tar.gz
+
+  publish:
+    name: attach to release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: programs-*
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            metamoult-*.zip
+            metamoult-*.tar.gz
