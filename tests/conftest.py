@@ -66,3 +66,40 @@ def make_jpeg(path, *, exif: bool = True, orientation: int = 1, comment: bool = 
 @pytest.fixture
 def jpeg_file(tmp_path):
     return make_jpeg(tmp_path / "photo.jpg")
+
+
+def make_png(path, *, metadata: bool = True, size=(32, 24)):
+    """Write a small PNG with invented text, EXIF, XMP and a modification time."""
+    import struct
+    import zlib
+
+    from PIL.PngImagePlugin import PngInfo
+
+    from metamoult import containers
+
+    img = Image.effect_noise(size, 60).convert("RGB")
+    info = PngInfo()
+    kwargs = {}
+    if metadata:
+        info.add_text("Author", "Jane Example")
+        info.add_text("Comment", "taken at Jane's house")
+        info.add_text("Creation Time", "2020-01-02T03:04:05")
+        info.add_itxt("XML:com.adobe.xmp", XMP_PACKET.decode(), zip=True)
+        kwargs = {"pnginfo": info, "exif": fake_exif()}
+    buf = io.BytesIO()
+    img.save(buf, "PNG", **kwargs)
+    chunks = containers.parse_png(buf.getvalue())
+    if metadata:  # Pillow does not write tIME, so add one by hand
+        body = struct.pack(">HBBBBB", 2020, 1, 2, 3, 4, 5)
+        raw = struct.pack(">I", 7) + b"tIME" + body + struct.pack(">I", zlib.crc32(b"tIME" + body))
+        chunks.insert(1, containers.PngChunk(b"tIME", body, raw))
+    path.write_bytes(containers.build_png(chunks))
+    return path
+
+
+def make_webp(path, *, metadata: bool = True, size=(32, 24)):
+    """Write a small lossless WebP with invented EXIF and XMP."""
+    img = Image.effect_noise(size, 60).convert("RGB")
+    kwargs = {"exif": fake_exif(), "xmp": XMP_PACKET} if metadata else {}
+    img.save(path, "WEBP", lossless=True, **kwargs)
+    return path

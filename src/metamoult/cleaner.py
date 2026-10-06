@@ -7,8 +7,9 @@ from pathlib import Path
 
 import piexif
 
-from . import jpeg
+from . import containers, jpeg
 from .core import Finding, UnsupportedFormatError, detect_format, scan_file
+from .scanners.image import PNG_METADATA_CHUNKS, WEBP_METADATA_CHUNKS
 
 _ORIENTATION_TAG = piexif.ImageIFD.Orientation
 
@@ -57,7 +58,29 @@ def _clean_jpeg(src: Path, dst: Path) -> None:
     dst.write_bytes(jpeg.build_jpeg(kept, tail))
 
 
-_CLEANERS = {"jpeg": _clean_jpeg}
+def _clean_png(src: Path, dst: Path) -> None:
+    """Drop text, EXIF and timestamp chunks; the pixel data is copied untouched."""
+    chunks = containers.parse_png(src.read_bytes())
+    dst.write_bytes(containers.build_png(
+        [c for c in chunks if c.type not in PNG_METADATA_CHUNKS]))
+
+
+_VP8X_EXIF_FLAG = 0x08
+_VP8X_XMP_FLAG = 0x04
+
+
+def _clean_webp(src: Path, dst: Path) -> None:
+    """Drop EXIF and XMP chunks (and the matching VP8X flags); no re-encoding."""
+    chunks = [c for c in containers.parse_webp(src.read_bytes())
+              if c.fourcc not in WEBP_METADATA_CHUNKS]
+    for chunk in chunks:
+        if chunk.fourcc == b"VP8X" and chunk.body:
+            flags = chunk.body[0] & ~(_VP8X_EXIF_FLAG | _VP8X_XMP_FLAG)
+            chunk.body = bytes([flags]) + chunk.body[1:]
+    dst.write_bytes(containers.build_webp(chunks))
+
+
+_CLEANERS = {"jpeg": _clean_jpeg, "png": _clean_png, "webp": _clean_webp}
 
 
 def clean_file(src: str | Path, out_dir: str | Path | None = None) -> CleanResult:

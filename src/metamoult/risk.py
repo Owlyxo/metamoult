@@ -27,7 +27,7 @@ _RULES: list[tuple[str, Risk, str]] = [
     # --- MEDIUM ---
     (r"(^|:)(make|model|lensmake|lensmodel|lens|hostcomputer|devicemanufacturer)$",
      Risk.MEDIUM, "This reveals which device or lens was used."),
-    (r"date|created|modified|lastprinted", Risk.MEDIUM,
+    (r"date|created|creation|modified|lastprinted", Risk.MEDIUM,
      "This reveals when the file was created or changed."),
     (r"software|application|producer", Risk.MEDIUM,
      "This reveals which program created or edited the file."),
