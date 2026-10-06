@@ -1,0 +1,13 @@
+# Your own original photos for local testing - never commit these
+samples/private/*
+!samples/private/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+*.spec
+.pytest_cache/

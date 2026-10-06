@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metamoult"
+version = "0.1.0"
+description = "See and remove hidden metadata from photos, PDFs and Office files. Offline."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["metadata", "exif", "privacy", "moult", "molt"]
+dependencies = [
+    "Pillow>=10.0",
+    "pillow-heif>=0.16",
+    "pypdf>=4.0",
+    "piexif>=1.1.3",
+]
+
+[project.optional-dependencies]
+gui = ["tkinterdnd2>=0.3"]
+dev = ["pytest>=7.0", "pyinstaller>=6.0"]
+
+[project.scripts]
+metamoult = "metamoult.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
