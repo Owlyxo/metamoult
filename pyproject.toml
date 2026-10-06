@@ -24,6 +24,9 @@ dev = ["pytest>=7.0", "pyinstaller>=6.0"]
 [project.scripts]
 metamoult = "metamoult.cli:main"
 
+[project.gui-scripts]
+metamoult-gui = "metamoult.gui:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

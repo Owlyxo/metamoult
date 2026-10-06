@@ -115,6 +115,8 @@ def build_parser() -> argparse.ArgumentParser:
     clean.add_argument("files", nargs="+", metavar="file")
     clean.add_argument("--out", metavar="folder", type=Path,
                        help="put the cleaned copies in this folder")
+
+    sub.add_parser("gui", help="open the graphical interface (needs tkinter)")
     return parser
 
 
@@ -125,6 +127,9 @@ def main(argv: list[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")  # never crash on odd characters
     args = build_parser().parse_args(argv)
+    if args.command == "gui":
+        from .gui import main as gui_main  # imported late: tkinter is only needed here
+        return gui_main()
     paths = _expand(args.files)
     if args.command == "scan":
         return _scan(paths)
