@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import piexif
+from pypdf import PdfWriter
 
 from . import containers, jpeg
 from .core import Finding, UnsupportedFormatError, detect_format, scan_file
+from .scanners.pdf import open_pdf
 from .scanners.image import PNG_METADATA_CHUNKS, WEBP_METADATA_CHUNKS
 
 _ORIENTATION_TAG = piexif.ImageIFD.Orientation
@@ -98,7 +100,28 @@ def _clean_heic(src: Path, dst: Path) -> None:
         str(dst), quality=HEIC_QUALITY, exif=None, xmp=None, icc_profile=icc_profile)
 
 
-_CLEANERS = {"jpeg": _clean_jpeg, "png": _clean_png, "webp": _clean_webp, "heic": _clean_heic}
+# Keys that can hold metadata on the catalog or on single pages.
+_PDF_ROOT_KEYS = ("/Metadata", "/PieceInfo")
+_PDF_PAGE_KEYS = ("/Metadata", "/PieceInfo", "/LastModified")
+
+
+def _clean_pdf(src: Path, dst: Path) -> None:
+    """Write a fresh PDF without info dictionary, XMP or document ID.
+
+    Writing a new file also drops old revisions left over from incremental saves.
+    """
+    writer = PdfWriter(clone_from=open_pdf(src))
+    writer.metadata = None  # removes the info dictionary and the trailer /ID
+    for key in _PDF_ROOT_KEYS:
+        writer._root_object.pop(key, None)
+    for page in writer.pages:
+        for key in _PDF_PAGE_KEYS:
+            page.pop(key, None)
+    with open(dst, "wb") as fh:
+        writer.write(fh)
+
+
+_CLEANERS = {"jpeg": _clean_jpeg, "png": _clean_png, "webp": _clean_webp, "heic": _clean_heic, "pdf": _clean_pdf}
 
 
 def clean_file(src: str | Path, out_dir: str | Path | None = None) -> CleanResult:

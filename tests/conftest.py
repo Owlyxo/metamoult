@@ -113,3 +113,29 @@ def make_heic(path, *, metadata: bool = True, size=(64, 48)):
     kwargs = {"exif": fake_exif(), "xmp": XMP_PACKET} if metadata else {}
     pillow_heif.from_pillow(img).save(str(path), quality=90, **kwargs)
     return path
+
+
+def make_pdf(path, *, metadata: bool = True):
+    """Write a one-page PDF with invented info-dictionary and XMP metadata."""
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, NameObject
+
+    writer = PdfWriter()
+    writer.add_blank_page(200, 200)
+    if metadata:
+        writer.add_metadata({
+            "/Author": "Jane Example",
+            "/Creator": "FakeEditor",
+            "/Title": "Jane's tax return",
+            "/CreationDate": "D:20200102030405+01'00'",
+        })
+        stream = DecodedStreamObject()
+        stream.set_data(XMP_PACKET)
+        stream.update({NameObject("/Type"): NameObject("/Metadata"),
+                       NameObject("/Subtype"): NameObject("/XML")})
+        writer._root_object[NameObject("/Metadata")] = writer._add_object(stream)
+    else:
+        writer.metadata = None
+    with open(path, "wb") as fh:
+        writer.write(fh)
+    return path
